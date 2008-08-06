@@ -1,0 +1,407 @@
+:- module bigint.
+#include "bigint.ph"
+% #define DEBUG 1
+
+%
+% 加算
+%   add +X +Y -R
+%   :: R = X + Y
+%   (X, Y, Rはリスト)
+%
+add(X,Y,R) :- add(X,Y,0,R).
+add([X|XR],[Y|YR],C,R) :- add(XR, YR, C2, R2),	% 上位を加算
+	XY := X + Y + C,			% 桁の加算
+	XYL:= XY /\ RADIX_MASK,			% 繰り上がりの計算
+	C2 := XY >> RADIX_BITS,			% |
+	R = [XYL|R2].				% 結果作成
+add([X|XR],[],C,R) :- add(XR, [], C2, R2),	% 片方の桁数が大きいときの処理
+	XY := X + C,				% |
+	XYL:= XY /\ RADIX_MASK,			% |
+	C2 := XY >> RADIX_BITS,			% |
+	R = [XYL|R2].				% |
+add([],[Y|YR],C,R) :- add([Y|YR], [], C, R).	% |
+add([],[],C,R) :- C > 0 | R = [C].		% 繰り上がりがあれば桁を作成
+add([],[],0,R) :- R = [].			% 繰り上がりがなければ空リストを作成
+
+%
+% 減算
+%   sub +X +Y -R
+%   :: R = X - Y
+%   (X, Y, Rはリスト. X >= Y である必要がある)
+%
+sub(X,Y,R) :- sub(X,Y,0,R1), empty_check(R1,R).
+sub([X|XR],[Y|YR],C,R) :- T:=X-Y-C,
+	TL:=T /\ RADIX_MASK,
+	sub_helper(T,TH),
+	sub(XR,YR,TH,R1),
+	join_wo_h0(TL,R1,R).
+sub([X|XR],[],C,R) :- T:=X-C,
+	TL:=T /\ RADIX_MASK,
+	sub_helper(T,TH),
+	sub(XR,[],TH,R1),
+	join_wo_h0(TL,R1,R).
+sub([],[],0,R) :- R=[].
+sub_helper(T,TH) :- T <  0 | TH = 1.
+sub_helper(T,TH) :- T >= 0 | TH = 0.
+
+%
+% 乗算
+%   mult +X +Y -R
+%   :: R = X * Y
+%   (X, Y, Rはリスト)
+%
+mult(X,[Y|YR],R) :- atom(YR) | mult1(X,Y,R).	% 片方が1桁かチェック
+mult([X|XR],Y,R) :- atom(XR) | mult1(Y,X,R).	% |
+otherwise.					% |
+mult(X,Y,R) :- mult_(X,Y,R).			% |
+mult1(X,0,R) :- R=[0].				% 0で乗算は解ゼロ
+mult1(X,1,R) :- R=X.				% 1で乗算はもう片方の数を解に
+otherwise.
+mult1(X,Y,R) :- mult_(X,[Y],R).
+mult_([X|XR],[Y|YR],R) :- mult_([X|XR],YR,R1),
+	C:=Y*X, CL:=C /\ RADIX_MASK,
+	CH:=C >> RADIX_BITS,
+	mult__(XR,Y,R1,CH,R2), R=[CL|R2].
+mult_(X,[],R) :- R=[].
+mult__([X|XR],Y,[RT|RR],C,R) :- R=[CL|R1],
+	C1:=X*Y+C+RT,
+	CL:=C1 /\ RADIX_MASK,
+	CH:=C1 >> RADIX_BITS,
+	mult__(XR,Y,RR,CH,R1).
+mult__([X|XR],Y,[],C,R) :- R=[CL|R1],
+	C1:=X*Y+C,
+	CL:=C1 /\ RADIX_MASK,
+	CH:=C1 >> RADIX_BITS,
+	mult__(XR,Y,[],CH,R1).
+mult__([],Y,[RT|RR],C,R) :- R=[CL|R1],
+	C1:=C+RT,
+	CL:=C1 /\ RADIX_MASK,
+	CH:=C1 >> RADIX_BITS,
+	mult__([],Y,RR,CH,R1).
+mult__([],Y,[],C,R) :- join_wo_h0(C,[],R).
+
+%
+% 除算
+%   div +X +Y -Q
+%   divmod +X +Y -Q -R
+%   :: Q = X / Y, R = X mod Y
+%   (X, Y, Q, Rはリスト)
+%
+div(X,Y,Q) :- divmod(X,Y,Q,R).
+divmod([X|XR],[Y|YR],Q,R) :- atom(YR)
+	| divmod1([X|XR],Y,Q,M1), R=[M1].	% Yの桁数をチェック
+otherwise.
+divmod(X,Y,Q,R) :- cmp(X,Y,C),
+	divmod_1(X,Y,C,Q,R).			% XとYの大小関係をチェック
+divmod_1(X,Y,0,Q,R) :- Q=[1], R=[0].		% X=YなのでR=1,M=0
+divmod_1(X,Y,-1,Q,R) :- Q=[0], R=X.		% X<YなのでR=0,M=X
+divmod_1(X,Y,1,Q,R) :- get_highest(Y,YHIGH),
+	divmod_find_align(YHIGH,NORMALIZEBITS),
+	lshift(X,NORMALIZEBITS,REM1),
+	lshift(Y,NORMALIZEBITS,Y2),
+	pad_zero_high(REM1,XLEN,REM),
+	get_highest(Y2,YL,YH),
+	get_length(Y,YLEN),
+	get_length(X,XLEN1), get_length(REM1,REM1LEN),
+	XLEN:=XLEN1-REM1LEN+1,
+#if DEBUG
+	io:outstream([print('shift='),print(NORMALIZEBITS),
+		      print(', xlen='),print(XLEN1),print(', ylen='),
+		      print(YLEN),print(', x='),print(X),
+		      print(', y='),print(Y),print(', x2='),
+		      print(REM1),print(', y2='),print(Y2),nl]),
+#endif
+	divmod_proc(REM,XLEN1,Y2,YL,YH,YLEN,[],Q1,R1),
+	rshift(R1,NORMALIZEBITS,R2),
+	normalize(R2,R), normalize(Q1,Q).
+divmod_proc(X,XLEN,Y,YL,YH,YLEN,PQ,Q,R) :- XLEN < YLEN | Q=PQ, R=X.
+otherwise.
+divmod_proc(X,XLEN,Y,YL,YH,YLEN,PQ,Q,R) :- get_highest(X,XL,XM,XH),
+	DIVID := (XH << RADIX_BITS) + XM,
+	divmod_find_hat(DIVID,XL,YH,YL,QHAT,RHAT),
+	divmod_try(X,Y,0,XS,QHAT,X2,OC),
+	divmod_fback(X2,Y,XS,OC,QHAT,QHAT1,X3),
+	resize(X3,XLEN2,X4),
+#if DEBUG
+	io:outstream([print('start: '),print(X),print(' DIVID='),
+		      print(DIVID),print(' QHAT='),print(QHAT),
+		      print(' xlen='),print(XLEN),print(', ylen='),
+		      print(YLEN),nl]),
+	io:outstream([print('fback: '),print(X2),print('=>'),print(X3),
+		      print('=>'),print(X4),nl]),
+#endif
+	XS := XLEN - YLEN,
+	XLEN2 := XLEN - 1,
+	divmod_proc(X4,XLEN2,Y,YL,YH,YLEN,PQ1,Q,R),
+#if DEBUG
+	io:outstream([print('end  : '),print('qhat='),print(QHAT1),nl]),
+#endif
+	PQ1=[QHAT1|PQ].
+divmod_try([X|XR],Y,XI,XS,HAT,O,OC) :- XI < XS | O=[X|O2],
+	divmod_try(XR,Y,XI2,XS,HAT,O2,OC), XI2:=XI+1.
+otherwise.
+divmod_try(X,Y,XI,XS,HAT,O,OC) :- divmod_try2(X,Y,HAT,0,O,OC).
+divmod_try2([],[],HAT,C,O,OC) :- O=[], OC=C.
+divmod_try2([X|XR],[],HAT,C,O,OC) :- atom(XR),X=:=0 | O=[], OC=C.
+divmod_try2([X|XR],[],HAT,C,O,OC) :- atom(XR),X=\=0 | O=[X1],
+	divmod_safe_subtract(X,C,X1),
+	divmod_try3(X,X1,0,OC).
+divmod_try2([X|XR],[Y|YR],HAT,C,O,OC) :- MC := C + Y * HAT,
+	divmod_safe_subtract(X,MC0,X1),
+	MC0 := MC /\ RADIX_MASK,
+	MC1 := MC >> RADIX_BITS,
+	divmod_try3(X,X1,MC1,MC2),
+	divmod_try2(XR,YR,HAT,MC2,O2,OC), O=[X1|O2].
+divmod_try3(X,X1,MC1,MC2) :- X1 > X | MC2 := MC1 + 1.
+otherwise.
+divmod_try3(X,X1,MC1,MC2) :- MC2=MC1.
+divmod_fback(X,Y,XS,OC,HAT,NHAT,NX) :- OC=:=0 | NX=X, NHAT=HAT.
+divmod_fback(X,Y,XS,OC,HAT,NHAT,NX) :- OC=\=0 | divmod_fback2(X,Y,0,XS,NX), 
+	NHAT := HAT - 1.
+divmod_fback2([X|XR],Y,XI,XS,NX) :- XI <  XS | divmod_fback2(XR,Y,XI2,XS,NX2),
+	XI2 := XI+1, NX=[X|NX2].
+divmod_fback2(X,Y,XI,XS,NX)      :- XI >= XS | divmod_fback3(X,Y,0,NX).
+% fback3 QuickHack
+% TODO: これで合ってる? 
+%       コメントアウトしている下のfback3の方が正しいような...
+divmod_fback3(_,[],S,NX) :- join_wo_h0(S,[],NX).
+% divmod_fback3([],[],S,NX) :- join_wo_h0(S,[],NX).
+% divmod_fback3([X|XR],[],S,NX) :- atom(XR) |
+%	join_wo_h0(S1,[],NX), S1 := 0.
+divmod_fback3([X|XR],[Y|YR],S,NX) :- S1 := S + X + Y,
+	X2 := S1 /\ RADIX_MASK,
+	S2 := S1 >> RADIX_BITS,
+	divmod_fback3(XR,YR,S2,NX2),
+	NX=[X2|NX2].
+divmod_safe_subtract(X,Y,R) :- X < Y | R := X + RADIX_VAL - Y.
+divmod_safe_subtract(X,Y,R) :- X >=Y | R := X - Y.
+divmod_find_hat(DIVID,XL,YH,YL,QHAT,RHAT) :- QH1 := DIVID / YH,
+	RH1 := DIVID mod YH,
+	divmod_find_hat(QH1,RH1,XL,YH,YL,QHAT,RHAT).
+divmod_find_hat(QH,RH,XL,YH,YL,QHAT,RHAT) :- QH=:=RADIX_VAL
+	| divmod_find_hat2(QH,RH,XL,YH,YL,QHAT,RHAT).
+divmod_find_hat(QH,RH,XL,YH,YL,QHAT,RHAT) :- QH*YL > ((RH<<RADIX_BITS)+XL)
+	| divmod_find_hat2(QH,RH,XL,YH,YL,QHAT,RHAT).
+otherwise.
+divmod_find_hat(QH,RH,XL,YH,YL,QHAT,RHAT) :- QHAT=QH, RHAT=RH.
+divmod_find_hat2(QH,RH,XL,YH,YL,QHAT,RHAT) :- QH1 := QH - 1,
+	RH1 := RH + YH, divmod_find_hat3(QH1,RH1,XL,YH,YL,QHAT,RHAT).
+divmod_find_hat3(QH,RH,XL,YH,YL,QHAT,RHAT) :- RH < RADIX_VAL
+	| divmod_find_hat(QH,RH,XL,YH,YL,QHAT,RHAT).
+otherwise.
+divmod_find_hat3(QH,RH,XL,YH,YL,QHAT,RHAT) :- QHAT=QH, RHAT=RH.
+divmod_find_align(V,S) :- divmod_find_align(V,0,-1,S).
+divmod_find_align(V,0,C,S) :- C =\= RADIX_BITS |
+	divmod_find_align(V,M2,C2,S),
+	C2 := C+1, M1 := RADIX_HALF >> C2,
+	M2 := V /\ M1.
+divmod_find_align(V,M,C,S) :- M =\= 0 | S=C.
+divmod_find_align(V,M,RADIX_BITS,S) :- S := RADIX_BITS.
+
+%
+% 左シフト
+%   lshift +X +Y -R
+%   :: R = X << Y
+%   (X, Rはリスト. Yはスカラ値)
+%
+lshift(X,Y,R) :- lshift(X,0,Y2,R1),
+	Y1 := Y / RADIX_BITS,			% 0で埋める桁数を算出
+	Y2 := Y mod RADIX_BITS,			% 基数未満のシフト数を算出
+	pad_zero(R1,Y1,R).			% ゼロでY1桁を埋める
+lshift([X|XR],T,Y,R) :- lshift(XR,T2,Y,R1),
+	R = [T3|R1],
+	T3 := ((X << Y) /\ RADIX_MASK) \/ T,
+	T2 := X >> (RADIX_BITS - Y).
+lshift([],0,Y,R) :- R=[].
+otherwise.
+lshift([],T,Y,R) :- R=[T].
+
+%
+% 右シフト
+%   rshift +X +Y -R
+%   :: X = X >> Y
+%   (X, Rはリスト. Yはスカラ値)
+%
+rshift(X,Y,R) :- rshift(X1,T,Y2,R1),
+	Y1 := Y / RADIX_BITS,
+	Y2 := Y mod RADIX_BITS,
+	remove_tail(X,Y1,X1), empty_check(R1,R).
+rshift([X|XR],T,Y,R) :- rshift(XR,T2,Y,R1),
+	T3 := T2 \/ (X >> Y),
+	T := (X << (RADIX_BITS - Y)) /\ RADIX_MASK,
+	join_wo_h0(T3,R1,R).
+rshift([],T,Y,R) :- R=[], T=0.
+remove_tail(X,0,R) :- R = X.
+otherwise.
+remove_tail([X|XR],Y,R) :- remove_tail(XR,Y1,R), Y1 := Y - 1.
+
+%
+% 1桁の除算
+%   div1 +X +Y -R
+%   :: R = X / Y
+%   (X, Rはリスト. Yはスカラ値)
+%
+%   divmod1 +X +Y -R -M
+%   :: R = X / Y, M = X mod Y
+%   (X, Rはリスト. Y, Mはスカラ値)
+%
+div1(X,Y,R) :- div1(X,Y,T,R).
+divmod1(X,Y,R,M) :- div1(X,Y,M,R).
+div1([X|XR],Y,T,R) :- div1(XR,Y,T2,R2),
+	T3 := (T2 << RADIX_BITS) \/ X,
+	T4 := T3 / Y, T:=T3 mod Y,
+	join_wo_h0(T4,R2,R).
+div1([],Y,T,R) :- T=0, R=[].
+
+%
+% 指定基数の文字列に変換 (リストXを基数Rで文字列に変換しYに格納)
+%   str +X -Y
+%   (Y = Xの十進表現)
+%
+%   str +X +R -Y
+%   (Y = XのR進表現)
+%
+str(X,Y) :- str(X,10,Y).
+str([],R,Y) :- Y="".
+otherwise.
+str(X,R,Y) :- str(XR,R,Y2),
+	divmod1(X,R,XR,M),
+	digit2str(M,S),
+	generic:join(Y2,S,Y).
+digit2str(M,S) :- M<10  | T:=M+0'0, new_string(S,[T],8).
+digit2str(M,S) :- M>=10 | T:=M-10+0'a, new_string(S,[T],8).
+
+%
+% 比較関数
+%   cmp +X +Y -R
+%   :: R = (X == Y ? 0 : X > Y ? 1 : -1)
+%
+cmp(X,Y,R) :- cmp(X,Y,0,R).
+cmp([X|XR],[Y|YR],OLD,R) :- cmp_u1(X,Y,OLD,R1), cmp(XR,YR,R1,R).
+cmp([],[Y|YR],OLD,R) :- R := -1.
+cmp([X|XR],[],OLD,R) :- R := 1.
+cmp([],[],OLD,R) :- R = OLD.
+cmp_u1(X,Y,OLD,R) :- X =:= Y | R := OLD.
+cmp_u1(X,Y,OLD,R) :- X < Y | R := -1.
+cmp_u1(X,Y,OLD,R) :- X > Y | R := 1.
+
+%
+% 比較関数 (等しいかを調べる)
+%   eq +X +Y -R
+%   :: R = (X == Y ? 0 : 1)
+%
+eq([X|XR],[Y|YR],R) :- X =\= Y | R=1.
+eq([X|XR],[Y|YR],R) :- X =:= Y | eq(XR,YR,R).
+eq([],[Y|YR],R) :- R=1.
+eq([X|XR],[],R) :- R=1.
+eq([],[],R) :- R=0.
+
+%
+% ランダム値生成
+% rand +MAX -R
+%   0 <= R < MAX の範囲の数値を生成する
+%
+rand(MAX,R) :- rand(MAX,0,R).
+rand([X|XR],C,R) :- atom(XR),inline:"%0 = makeint(rand());":[A-int] |
+	B := A mod X,
+	(B=:=X -> (C >= 0 -> B1 := B - 1;
+		   otherwise;
+		   true   -> B1 := B);
+	 otherwise;
+	 true  -> B1 := B),
+	R = [B1].
+otherwise.
+rand([X|XR],C,R) :- inline:"%0 = makeint(rand());":[A-int] |
+	B := A /\ RADIX_MASK,
+	R = [B|R1],
+	(B < X -> C1 = -1;
+	 B > X -> C1 =  1;
+	 B=:=X -> C1 = C),
+	rand(XR,C1,R1).
+
+%===================================================================
+%
+% ヘルパ
+%
+%===================================================================
+%
+% 最上位の0を追加しないで結合するヘルパ
+%   join_wo_h0 +X +Y -R
+%   :: R=[X|Y]
+%   (Xはスカラ値. Y, Rはリスト. X=0かつY=[]の場合はR=[])
+%
+join_wo_h0(0,[],R) :- R = [].             
+join_wo_h0(D,[],R) :- D =\= 0 | R = [D].
+otherwise.
+join_wo_h0(D,RR,R) :- R = [D|RR].
+
+normalize(X,R) :- normalize2(X,R1), empty_check(R1,R).
+normalize2([X|XR],R) :- join_wo_h0(X,R1,R), normalize2(XR,R1).
+normalize2([],R) :- R=[].
+
+%
+% 下位を0で埋めるヘルパ
+%   pad_zero +X +S -R
+%   :: R = [0*S times|X]
+%   (X, Rはリスト. Sはスカラ値)
+%
+pad_zero(X,S,R) :- S=\=0 | R1=[0|X], S1:=S-1, pad_zero(R1,S1,R).
+pad_zero(X,S,R) :- S=:=0 | R=X.
+
+%
+% 上位を0で埋めるヘルパ
+%   pad_zero_high +X +S -R
+%   :: R = [X0,X1,X2|[0*S times]]
+%   (X, Rはリスト. Sはスカラ値)
+%
+pad_zero_high(0,R) :- R=[].
+otherwise.
+pad_zero_high(S,R) :- R=[0|R1], S1:=S-1, pad_zero_high(S1,R1).
+pad_zero_high([X|XR],S,R) :- atom(XR) | R=[X|R1], pad_zero_high(S,R1).
+otherwise.
+pad_zero_high([X|XR],S,R) :- pad_zero_high(XR,S,R1), R=[X|R1].
+
+%
+% リサイズ
+%
+resize(X,S,R) :- get_length(X,XLEN), resize2(X,S1,S,R), S1 := S-XLEN.
+resize2(X,T,S,R) :- T =:= 0 | R=X.
+resize2(X,T,S,R) :- T  <  0 | resize3(X,0,S,R).
+resize3([X|XR],I,S,R) :- I =:= S | R=[X].
+resize3([X|XR],I,S,R) :- I =\= S | resize3(XR,I2,S,R1), I2 := I + 1, R=[X|R1].
+
+%
+% 最上位の桁を取得する
+%   get_highest +X -H
+%   get_highest +X -HL -HH
+%   :: X=[X0[H1[H[]]]] or X=[X0[X2[HL[HH[]]]]]
+%   (Xはリスト. H, HL, HHはスカラ値)
+get_highest([X|XR],H) :- atom(XR) | H = X.
+otherwise.
+get_highest([X|XR],H) :- get_highest(XR,H).
+get_highest([X|XR],HL,HH) :- atom(XR) | HL=X, HH=0.
+get_highest([X1,X2|XR],HL,HH) :- atom(XR) | HL=X1, HH=X2.
+otherwise.
+get_highest([X1,X2|XR],HL,HH) :- get_highest([X2|XR],HL,HH).
+get_highest([X|XR],HL,HM,HH) :- atom(XR) | HL=X, HM=0, HH=0.
+get_highest([X1,X2|XR],HL,HM,HH) :- atom(XR) | HL=X1, HM=X2, HH=0.
+get_highest([X1,X2,X3|XR],HL,HM,HH) :- atom(XR) | HL=X1, HM=X2, HH=X3.
+otherwise.
+get_highest([X1,X2,X3|XR],HL,HM,HH) :- get_highest([X2,X3|XR],HL,HM,HH).
+
+%
+% リストの長さを取得する
+%   get_length +X -R
+%   :: R = length of X
+%   (Xはリスト, Rはスカラ値)
+%
+get_length(X,R) :- get_length(X,0,R).
+get_length([],C,R) :- R=C.
+get_length([X|XR],C,R) :- get_length(XR,C2,R), C2:=C+1.
+
+%
+% 空リストなら[0]で置き換える
+%
+empty_check([],R) :- R=[0].
+otherwise.
+empty_check(X,R) :- R=X.

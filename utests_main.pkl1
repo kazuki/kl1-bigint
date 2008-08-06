@@ -1,0 +1,159 @@
+:- module main.
+
+% メイン
+main :- tests([],O), unittest:output(O).
+
+% 単体テスト
+tests(O,OUT) :- tests_cmp(O,O1), tests_lshift(O1,O2),
+	tests_rshift(O2,O3), tests_str(O3,O4),
+	tests_add(O4,O5), tests_sub(O5,O6),
+	tests_mult(O6,O7), tests_div(O7,O8),
+	tests_modulus_add(O8,O9), tests_modulus_mult(O9,O10),
+	tests_modulus_pow(O10, O11),
+	tests_theory_gcd(O11,O12),
+	tests_miller_rabin(O12,O13),
+	tests_mont(O13,O14),
+	OUT=O14.
+
+% bigint:cmpテスト
+tests_cmp(O,OUT) :- tests_cmp1(O,O1), tests_cmp2(O1,O2), tests_cmp3(O2,O3),
+	tests_cmp4(O3,O4), tests_cmp5(O4,O5), tests_cmp6(O5,O6), OUT=O6.
+tests_cmp1(O,OUT) :- X=[0,1], Y=[1], bigint:cmp(X,Y,C), unittest:check("cmp1",C,1,O,OUT).
+tests_cmp2(O,OUT) :- X=[0], Y=[1,2], bigint:cmp(X,Y,C), unittest:check("cmp2",C,-1,O,OUT).
+tests_cmp3(O,OUT) :- X=[0,1], Y=[0,1], bigint:cmp(X,Y,C), unittest:check("cmp3",C,0,O,OUT).
+tests_cmp4(O,OUT) :- X=[1,5], Y=[5,1], bigint:cmp(X,Y,C), unittest:check("cmp4",C,1,O,OUT).
+tests_cmp5(O,OUT) :- X=[4,1], Y=[1,6], bigint:cmp(X,Y,C), unittest:check("cmp5",C,-1,O,OUT).
+tests_cmp6(O,OUT) :- X=[1,1], Y=[5,1], bigint:cmp(X,Y,C), unittest:check("cmp6",C,-1,O,OUT).
+
+% bigint:addテスト
+tests_add(O,OUT)  :- tests_add1(O,O1), tests_add2(O1,O2), tests_add3(O2,O3), tests_add4(O3,O4), OUT=O4.
+tests_add1(O,OUT) :- X=[3,2,1], Y=[9,8,7], Z=[12,10,8], bigint:add(X,Y,R), unittest:check("add1",R,Z,O,OUT).
+tests_add2(O,OUT) :- X=[8191,1,1], Y=[1], Z=[0,2,1], bigint:add(X,Y,R), unittest:check("add2",R,Z,O,OUT).
+tests_add3(O,OUT) :- X=[8191,8191,1], Y=[1], Z=[0,0,2], bigint:add(X,Y,R), unittest:check("add3",R,Z,O,OUT).
+tests_add4(O,OUT) :- Y=[8191,8191,1], X=[1], Z=[0,0,2], bigint:add(X,Y,R), unittest:check("add4",R,Z,O,OUT).
+
+%bigint:subテスト
+tests_sub(O,OUT) :- tests_sub1(O,O1), tests_sub2(O1,O2),
+	tests_sub3(O2,O3), tests_sub4(O3,O4),
+	tests_sub5(O4,O5), OUT=O5.
+tests_sub1(O,OUT) :- X=[2,1], Y=[1], Z=[1,1], bigint:sub(X,Y,R), unittest:check("sub1",R,Z,O,OUT).
+tests_sub2(O,OUT) :- X=[3,2,1], Y=[2,1], Z=[1,1,1], bigint:sub(X,Y,R), unittest:check("sub2",R,Z,O,OUT).
+tests_sub3(O,OUT) :- X=[0,1], Y=[1], Z=[8191], bigint:sub(X,Y,R), unittest:check("sub3",R,Z,O,OUT).
+tests_sub4(O,OUT) :- X=[0,0,1], Y=[1], Z=[8191,8191], bigint:sub(X,Y,R), unittest:check("sub4",R,Z,O,OUT).
+tests_sub5(O,OUT) :- X=[2,1], Y=[2,1], bigint:sub(X,Y,R),
+	unittest:check("sub5",R,[0],O,OUT).
+
+% bigint:lshiftテスト
+tests_lshift(O,OUT) :- tests_lshift1(O,O1), tests_lshift2(O1,O2), tests_lshift3(O2,O3), OUT=O3.
+tests_lshift1(O,OUT) :- X=[2,1], S=10, Z=[2048, 1024], bigint:lshift(X,S,R), unittest:check("lshift1",R,Z,O,OUT).
+tests_lshift2(O,OUT) :- X=[3,1], S=12, Z=[4096, 4097], bigint:lshift(X,S,R), unittest:check("lshift2",R,Z,O,OUT).
+tests_lshift3(O,OUT) :- X=[3,1], S=14, Z=[0, 6, 2], bigint:lshift(X,S,R), unittest:check("lshift3",R,Z,O,OUT).
+
+% bigint:rshiftテスト
+tests_rshift(O,OUT) :- tests_rshift1(O,O1), tests_rshift2(O1,O2), tests_rshift3(O2,O3), tests_rshift4(O3,O4), OUT=O4.
+tests_rshift1(O,OUT) :- X=[8,4,2], S=1, Z=[4,2,1], bigint:rshift(X,S,R), unittest:check("rshift1",R,Z,O,OUT).
+tests_rshift2(O,OUT) :- X=[2,1], S=1, Z=[4097], bigint:rshift(X,S,R),  unittest:check("rshift2",R,Z,O,OUT).
+tests_rshift3(O,OUT) :- X=[3,2,1], S=14, Z=[4097], bigint:rshift(X,S,R),  unittest:check("rshift3",R,Z,O,OUT).
+tests_rshift4(O,OUT) :- X=[1], S=14, Z=[0], bigint:rshift(X,S,R),  unittest:check("rshift4",R,Z,O,OUT).
+
+% bigint:divテスト
+tests_div(O,OUT) :- tests_div1(O,O1), tests_div2(O1,O2), tests_div3(O2,O3),
+	tests_div4(O3,O4), tests_div5(O4,O5), tests_div6(O5,O6), OUT=O6.
+tests_div1(O,OUT) :- X=[3,2,1], Y=[123], bigint:divmod1(X,123,Q1,R1),
+	bigint:divmod(X,Y,Q2,R2),
+	unittest:check("div1-Q", Q2, Q1, O, O1),
+	unittest:check("div1-R", R2, [R1], O1, OUT). % 割る数が一桁の場合のテスト
+tests_div2(O,OUT) :- X=[2,1], Y=[1234,234], bigint:divmod(X,Y,Q,R),
+	unittest:check("div2-Q", Q, [0], O, O1),
+	unittest:check("div2-R", R, X, O1, OUT). % X < Yの時のテスト
+tests_div3(O,OUT) :- X=[2,1], Y=[2, 1], bigint:divmod(X,Y,Q,R),
+	unittest:check("div3-Q", Q, [1], O, O1),
+	unittest:check("div3-R", R, [0], O1, OUT). % X = Yの時のテスト
+tests_div4(O,OUT) :- X=[4,3,2,1], Y=[2,1], bigint:divmod(X,Y,Q,R),
+	unittest:check("div4-Q", Q, [2,0,1], O, O1),
+	unittest:check("div4-R", R, [0,1], O1, OUT).
+tests_div5(O,OUT) :- X=[1,2,3,4], Y=[2,1], bigint:divmod(X,Y,Q,R),
+	unittest:check("div4-Q", Q, [11,8187,3], O, O1),
+	unittest:check("div4-R", R, [8171], O1, OUT).
+tests_div6(O,OUT) :- 
+	X=[5188, 8137, 1], Y=[8077,3], EQ=[4096], ER=[1092, 3],
+	bigint:divmod(X,Y,Q,R),
+	unittest:check("div5-Q", Q, EQ, O, O1),
+	unittest:check("div5-R", R, ER, O1, OUT).
+
+% bigint:multテスト
+tests_mult(O,OUT) :- tests_mult0(O,O1), tests_mult1(O1,O2), tests_mult2(O2,O3),
+	tests_mult3(O3,O4), OUT=O4.
+tests_mult0(O,OUT) :- X=[3,2,1], Y=[0], bigint:mult(X,Y,S),
+	unittest:check("mult0",S,[0],O,OUT).
+tests_mult1(O,OUT) :- X=[3,2,1], Y=[1], bigint:mult(X,Y,S),
+	unittest:check("mult1",S,[3,2,1],O,OUT).
+tests_mult2(O,OUT) :- X=[3,2,1], Y=[2], bigint:mult(X,Y,S),
+	unittest:check("mult2",S,[6,4,2],O,OUT).
+tests_mult3(O,OUT) :- X=[3,2,1], Y=[2,1], bigint:mult(X,Y,S),
+	unittest:check("mult3",S,[6,7,4,1],O,OUT).
+
+% bigint:strテスト
+tests_str(O,OUT) :- tests_str16(O,O1), tests_str10(O1,OUT).
+tests_str16(O,OUT) :- X=[7890,5678,3456,1234,12], EX="c2693602c5ded2",
+	bigint:str(X,16,S), unittest:check("str16",S,EX,O,OUT).
+tests_str10(O,OUT) :- X=[7890,5678,3456,1234,12], EX="54721826177539794",
+	bigint:str(X,10,S), unittest:check("str10",S,EX,O,OUT).
+
+% modulus:addテスト
+tests_modulus_add(O,OUT) :- tests_modulus_add1(O,O1),
+	tests_modulus_add2(O1,O2), tests_modulus_add3(O2,O3), OUT=O3.
+tests_modulus_add1(O,OUT) :- X=[0,1], Y=[1], M=[2,1], modulus:add(X,Y,M,R),
+	unittest:check("mod_add1", R, [1,1], O, OUT).
+tests_modulus_add2(O,OUT) :- X=[1,1], Y=[1], M=[2,1], modulus:add(X,Y,M,R),
+	unittest:check("mod_add2", R, [0], O, OUT).
+tests_modulus_add3(O,OUT) :- X=[0,1], Y=[0,1], M=[2,1], modulus:add(X,Y,M,R),
+	unittest:check("mod_add3", R, [8190], O, OUT).
+
+% modulus:multテスト
+tests_modulus_mult(O,OUT) :- tests_modulus_mult1(O,O1),
+	OUT=O1.
+tests_modulus_mult1(O,OUT) :- X=[2,1], Y=[3,2], M=[1234,5], E=[5578,1],
+	modulus:mult(X,Y,M,R), unittest:check("mod_mult1", R, E, O, OUT).
+
+% modulus:powテスト
+tests_modulus_pow(O,OUT) :- %tests_modulus_pow1(O,O1),
+	tests_modulus_pow2(O,O2), OUT=O2.
+tests_modulus_pow1(O,OUT) :- X=[5286,5267,3907,1188,1404],
+	Y=[7980,6596,4221,561,1601],
+	M=[856,3384,2975,4209,2239],
+	E=[2768,6281,2085,2292,1255],
+	modulus:pow(X,Y,M,R),
+	unittest:check("mod_pow1", R, E, O, OUT).
+tests_modulus_pow2(O,OUT) :- X=[7], Y=[8163], M=[8077,3], E=[4607],
+	modulus:pow(X,Y,M,R), unittest:check("mod_pow2", R, E, O, OUT).
+
+% ntheory:gcdテスト
+tests_theory_gcd(O,OUT) :- tests_theory_gcd1(O,OUT).
+tests_theory_gcd1(O,OUT) :- X=[4026,3561,4213,5124,1952],
+	Y=[1316,2050,4823,4394,1472], E=[18],
+	ntheory:gcd(X,Y,R),
+	unittest:check("theory_gcd1", R, E, O, OUT).
+
+% primality:miller_rabinテスト
+tests_miller_rabin(O,OUT) :- OUT=O2,
+	N1=[4033], K1=[2], E1=1,		% 強擬素数 (base=2なら通る)
+	primality:miller_rabin(N1,K1,A1),
+	unittest:check("miller-rabin1", A1, E1, O, O1),
+	N2=[4033], K2=[3], E2=0,		% base=3なら上の数は合成数
+	primality:miller_rabin(N2,K2,A2),
+	unittest:check("miller-rabin2", A2, E2, O1, O2).
+
+% montgomeryモジュールのテスト
+tests_mont(O,OUT) :- 
+	X0=[3,2,1], M0=[3,2],
+	montgomery:to_mont(X0,M0,MX0),
+	montgomery:reduction(MX0,M0,R0),
+	unittest:check("mont-reduction0",R0,[4099],O,O1),
+	montgomery:mult(MX0,[1],M0,R0_),
+	unittest:check("mont-reduction1",R0_,[4099],O1,O2),
+	X2=[54,32,1],Y2=[765,432,1],M2=[5,3,2],
+	montgomery:to_mont(X2,M2,MX2),
+	montgomery:mult(MX2,Y2,M2,R2),
+	unittest:check("mont-reduction2",R2,[4392,7298,1],O2,O3),
+	OUT=O3.

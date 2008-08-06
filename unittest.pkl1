@@ -1,0 +1,62 @@
+:- module unittest.
+%
+% 単体テスト用補助モジュール
+%
+% 公開インターフェイス
+%   output +S
+%   check +M +AC +EX +O -OUT
+%
+
+%
+% 単体テストの結果出力
+% output +S
+% :: Sにcheckの出力を接続する
+%
+output(S) :- klicio:klicio([stdout(normal(S1))]), output(S,S1,S2),
+	S2=[nl,fwrite("Tests Run: "),putt(T),
+	    fwrite(", Failures: "),putt(F),
+	    fwrite("("),putt(FR),fwrite("%)"),
+	    fwrite(", Successes: "),putt(SU),
+	    fwrite("("),putt(SR),fwrite("%)"),nl],
+	sum(S,F,T), SU:=T-F, FR:=F*100/T, SR:=SU*100/T.
+output([X|XR],S1,S2) :- output(XR,S1,S3), output2(X,S3,S2).
+output([],S1,S2) :- S1=S2.
+output2([X|XR],S,R) :- X=:=0 | output3(XR,S,R).
+output2([X|XR],S,R) :- X=\=0 | S=R.		% 成功した結果は出力しない
+output3([X|XR],S,R) :- S=[S1|S2], output3(XR,S2,R), outputf(X,S1).
+output3([],S,R) :- S=[nl|R].
+outputf(X,O) :- string(X) | O=fwrite(X).	% 文字列出力用
+outputf(X,O) :- integer(X) | O=putt(X).		% 数値出力用 
+otherwise.
+outputf(X,O) :- O = putt(X).			% その他の出力用
+
+% 単体テスト集計用
+%   sum +S -F -T :: F=失敗数, T=テスト数
+sum(S,F,T) :- sum(S,0,0,F,T).
+sum([S|SR],CF,CT,F,T) :- sum_count(S,CF,CF1), CT1:=CT+1, sum(SR,CF1,CT1,F,T).
+sum([],CF,CT,F,T) :- F=CF, T=CT.
+sum_count([X|XR],CF,F) :- X=:=0 | F:=CF+1.
+sum_count([X|XR],CF,F) :- X=\=0 | F=CF.
+
+%
+% 実際の結果と予期する結果とを比較する
+% check +M +AC +EX +O -OUT
+% :: M=メッセージ文字列, AC=実際の結果, EX=予期する結果, O=前の結果のリスト
+%    OUT=新しい結果のリスト
+%
+check(M,AC,EX,O,OUT) :- integer(AC),integer(EX) | check_int(M,AC,EX,O,OUT).
+check(M,AC,EX,O,OUT) :- string(AC),string(EX) | check_str(M,AC,EX,O,OUT).
+otherwise.
+check(M,AC,EX,O,OUT) :- check_bigint(M,AC,EX,O,OUT).
+
+% checkの補助群
+check_int(M,AC,EX,O,OUT) :- AC=:=EX | ok(M,O,OUT).
+check_int(M,AC,EX,O,OUT) :- AC=\=EX | err(M,AC,EX,O,OUT).
+check_str(M,AC,EX,O,OUT) :- string_less_than(AC,EX) | err(M,AC,EX,O,OUT).
+check_str(M,AC,EX,O,OUT) :- string_less_than(EX,AC) | err(M,AC,EX,O,OUT).
+check_str(M,AC,EX,O,OUT) :- string_not_less_than(AC,EX),string_not_less_than(EX,AC) | ok(M,O,OUT).
+check_bigint(M,AC,EX,O,OUT) :- bigint:cmp(AC,EX,C), check2(M,AC,EX,C,O,OUT).
+check2(M,AC,EX,C,O,OUT) :- C=:=0 | ok(M,O,OUT).
+check2(M,AC,EX,C,O,OUT) :- C=\=0 | err(M,AC,EX,O,OUT).
+ok(M,O,OUT) :- M2=[1,M,": OK"], OUT=[M2|O].
+err(M,AC,EX,O,OUT) :- M2=[0,M,": Error (Actual=",AC,", Expected=",EX,")"], OUT=[M2|O].

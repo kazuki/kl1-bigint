@@ -1,0 +1,47 @@
+:- module modulus.
+%
+% 多倍長演算を用いた剰余演算モジュール
+%
+
+%
+% 加算
+% add +X +Y +M -R
+% :: R = (X + Y) mod M
+%
+add(X,Y,M,R) :- bigint:add(X,Y,R1),
+	bigint:cmp(R1,M,C),
+	add_(R1,M,C,R).
+add_(X,_,-1,R) :- R=X.
+otherwise.
+add_(X,M,_,R) :- bigint:sub(X,M,R).
+
+%
+% 乗算
+% mult +X +Y +M -R
+% :: R = (X * Y) mod M
+% TODO:
+%   Montgomery法を用いた高速乗算を実装する
+%
+mult(X,Y,M,R) :- bigint:mult(X,Y,R1),
+	bigint:divmod(R1,M,REM,R).
+
+%
+% 冪乗
+% pow +X +Y +M -R
+% pow_mont +X +Y +M -R
+% :: R = (X ^ Y) mod M
+%
+pow(X,Y,M,R) :- pow(X,Y,M,[1],R).
+pow(_,[Y|YR],_,T,R) :- atom(YR),Y=:=0 | R=T.
+otherwise.
+pow(X,[Y|YR],M,T,R) :- mult(X,X,M,X1),
+	BIT:=Y /\ 1,
+	(BIT =:= 1 -> mult(X,T,M,T1);
+	 BIT =:= 0 -> T1=T),
+	bigint:rshift([Y|YR],1,Y1),
+	pow(X1,Y1,M,T1,R).
+pow_mont(X,Y,M,R) :-
+	montgomery:to_mont(X,M,MX),
+	montgomery:inverse(M,MPRIME),
+	montgomery:pow(MX,Y,M,MPRIME,R1),
+	montgomery:mult(R1,[1],M,MPRIME,R).

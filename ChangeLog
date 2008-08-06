@@ -1,0 +1,136 @@
+2008-08-06  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* README.utf8.ja, LICENSE.BSD, LICENSE.MIT-X11: 追加
+
+2008-08-06  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* prime_finder.pkl1:
+	- io:outstreamを素数ごとに呼び出さないで、リストを使って出力するように変更
+	- マクロを使って整理
+
+2008-08-06  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* prime_finder.pkl1: 事前にsrandを呼び出すようにした
+	* Makefile: 単体テストの実行ファイル名をutestsに変更
+
+2008-08-04  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* bigint.pkl1: 二値が等しいかどうかのみを調べる機能を追加
+	* primality_tests.pkl1:
+	- bigint:cmpの代わりにbigint:eqを利用可能な箇所を置換
+	- マクロでotherwiseが使えることを知ったので、置き換え可能な箇所を置き換え
+
+2008-08-04  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* primality_tests.pkl1: ミラーラビンのパラメータが偶数か奇数かによって
+	モンゴメリ法を使うか使わないかを判断していたが、ミラーラビンにおいて
+	法となる数値は、素数判定を行う対象となる数値なので、パラメータには左右されず、
+	素数判定を行う数値が偶数ということはあり得ないので、モンゴメリ法を使わない
+	ミラーラビンの実装を削除
+
+2008-08-04  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* bigint.pkl1: 指定された数未満の乱数を生成する機能を実装
+	* primality_tests.pkl1: Jaeschkeの方法が適用できない大きな値の素数判定を
+	5個の乱数を用いてミラーラビンを行うように改良
+
+2008-08-04  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* primality_tests.pkl1: 指定された基底一覧を用いてミラーラビンテストを行う
+	trial_mrの最適化 (50%の高速化)
+
+2008-08-04  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* primality_tests.pkl1: ミラーラビン法の前に小さな素数で試し割りを行うように改良
+
+2008-08-03  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* primality_tests.pkl1: 法が奇数の時にモンゴメリを利用した計算を利用するように拡張
+
+2008-08-03  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* modulus.pkl1: モンゴメリ乗算を利用した冪乗計算を実装
+	(但し、小さい数値におけるパフォーマンスの問題から無効化)
+
+2008-08-03  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* prime_finder.pkl1, Makefile: 素数探索プログラムを実装
+
+2008-08-03  Kazuki Oikawa  <kazuki@panicode.com>
+	
+	* montgomery.pkl1: モンゴメリ乗算を利用した冪乗を実装
+
+2008-08-03  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* primality_tests.pkl1: DEBUG用の呼び出しがDEBUG時以外でも呼び出されていたのを修正
+
+2008-08-01  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* montgomery.pkl1: Montgomery乗算を実装
+	* main.pkl1: Montgomery乗算のテストケースを追加
+
+2008-07-31  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* Montgomery Reductionを実装
+
+2008-07-31  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* bigint.pkl1, bigint.ph: bigintで利用する基数のサイズなどの
+	定義をヘッダファイルに追い出した
+
+2008-07-30  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* Miller-Rabin素数判定法を実装
+
+2008-07-30  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 除算のバグを修正
+	(R/QHATの上限チェックの上限値の指定ミス)
+
+2008-07-26  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 剰余演算とGCDを求めるモジュールを追加
+
+2008-07-26  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 減算の解が0になる場合、結果として空リストが返すのを修正
+
+2008-07-24  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 乗算を30%高速化
+
+2008-07-24  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 減算を実装
+
+2008-07-24  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 左辺が右辺よりも大きな値の乗算のモンテカルロテストを追加
+
+2008-07-24  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 乗算を実装
+	* モンテカルロテストを演算毎に分離
+
+2008-07-24  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 単体テストを改良. 成功したテスト情報は表示せず、
+	集計結果と失敗したテスト情報のみを表示するように改良.
+
+2008-07-22  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 除算の商の最上位に0が来てしまう問題を修正
+
+2008-07-22  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 除算を実装
+
+2008-07-14  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* シフト演算、割る数が一桁の割り算、
+	指定基数の文字列に変換、比較関数を実装
+
+2008-07-14  Kazuki Oikawa  <kazuki@panicode.com>
+
+	* 加算を実装
+	* 単体テストを実装

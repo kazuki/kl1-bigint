@@ -1,0 +1,18 @@
+:- module main.
+
+% メイン
+main :- inline:"srand(time((void*)0));" |
+	klicio:klicio([stdout(normal(OUT))]),
+	find_primes([3], [5081,36], OUT).
+
+%
+% S〜Mまでの素数をリストアップ
+%
+find_primes(S,M,OUT) :-
+	primality:test(S,R),
+	bigint:add(S,[2],S1),
+	bigint:cmp(S1,M,C),
+	(R =:= 1 -> bigint:str(S,STR),OUT=[fwrite(STR),nl|OUT2];
+	 R =\= 1 -> OUT=OUT2),
+	(C =< 0 -> find_primes(S1,M,OUT2);
+	 C >  0 -> OUT2=[]).

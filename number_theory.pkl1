@@ -1,0 +1,13 @@
+:- module ntheory.
+%
+% 整数論的な演算モジュール
+%
+
+%
+% 最大公約数を求める
+%   gcd +X +Y -R
+%
+gcd(X,[Y|YR],R) :- Y=:=0,atom(YR) | R=X.
+otherwise.
+gcd(X,[Y|YR],R) :- bigint:divmod(X,[Y|YR],REM,M),
+	gcd([Y|YR],M,R).

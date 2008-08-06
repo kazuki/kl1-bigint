@@ -1,0 +1,178 @@
+:- module montgomery.
+#include "bigint.ph"
+% #define DEBUG 1
+
+%
+% Montgomeryリダクション
+%   reduction +X +M -R
+%   reduction +X +M +MPrime -R
+%
+reduction(X,M,R) :- inverse(M,MPRIME),
+	reduction(X,M,MPRIME,R).
+reduction(X,M,MPRIME,R) :-
+	reduction_(X,M,M,MPRIME,R1),
+	bigint:cmp(R1,M,C),
+	(C >= 0 -> bigint:sub(R1,M,R);
+	 C  < 0 -> R=R1).
+reduction_([X|XR],[MT|MTR],[M|MR],MPRIME,R) :-
+	U := (X * MPRIME) /\ RADIX_MASK,
+	C := (U * M + X) >> RADIX_BITS,
+#if DEBUG
+	io:outstream([print('M='),print(M),print(', U='),print(U),print(', C='),print(C),print(', X='),print(X),print(', M='),print(M),nl]),
+#endif
+	reduction__(XR,MR,C,U,R1),
+#if DEBUG
+	io:outstream([print('  R='),print(STRR1),nl]), bigint:str(R1,STRR1),
+#endif
+	reduction_(R1,MTR,[M|MR],MPRIME,R).
+reduction_(X,[],_,_,R) :- R=X.
+reduction__([X|XR],[M|MR],C,U,R) :-
+	C1 := C + U * M + X,
+	CL := C1 /\ RADIX_MASK,
+	CH := C1 >> RADIX_BITS,
+#if DEBUG
+	io:outstream([print('  C='),print(C1),print(', CL='),print(CL),print(', CH='),print(CH),print(', X='),print(X),print(', M='),print(M),nl]),
+#endif
+	R=[CL|R1],
+	reduction__(XR,MR,CH,U,R1).
+reduction__([],[M|MR],C,U,R) :-
+	C1 := C + U * M,
+	CL := C1 /\ RADIX_MASK,
+	CH := C1 >> RADIX_BITS,
+#if DEBUG
+	io:outstream([print('$ C='),print(C1),print(', CL='),print(CL),print(', CH='),print(CH),print(', M='),print(M),nl]),
+#endif
+	R=[CL|R1],
+	reduction__([],MR,CH,U,R1).
+reduction__([X|XR],[],C,U,R) :-
+	C1 := C + X,
+	CL := C1 /\ RADIX_MASK,
+	CH := C1 >> RADIX_BITS,
+#if DEBUG
+	io:outstream([print('# C='),print(C1),print(', CL='),print(CL),print(', CH='),print(CH),nl]),
+#endif
+	R=[CL|R1],
+	reduction__(XR,[],CH,U,R1).
+reduction__([],[],C,U,R) :- C =:= 0 | R=[].
+reduction__([],[],C,U,R) :- C =\= 0 | R=[C].
+
+%
+% Montgomery乗算
+%   mult +X +Y +M -R
+%   mult +X +Y +M +MPrime -R
+%
+mult(X,Y,M,R) :-
+	inverse(M,MPRIME),
+	mult(X,Y,M,MPRIME,R).
+mult(X,Y,M,MPRIME,R) :-
+	mult_(X,Y,M,M,MPRIME,[],R1),
+	bigint:cmp(R1,M,C),
+	(C >= 0 -> bigint:sub(R1,M,R);
+	 C  < 0 -> R=R1).
+mult_([X|XR],Y,[M|MR],[MT|MTR],MPRIME,Z,R) :-
+	mult_get(Y,Y0,YR), mult_get(Z,Z0,ZR),
+	U := ((Z0 + X * Y0) * MPRIME) /\ RADIX_MASK,
+	mult_helper(U,0,0,0,X,Y0,Z0,M,C,_,C1,C2),
+	mult__(X,YR,MR,MPRIME,ZR,U,C,C1,C2,R1),
+	mult_(XR,Y,[M|MR],MTR,MPRIME,R1,R).
+mult_([],_,[M|MR],[MT|MTR],MPRIME,Z,R) :-
+	mult_get(Z,Z0,ZR),
+	U := (Z0 * MPRIME) /\ RADIX_MASK,
+	C := (U * M + Z0) >> RADIX_BITS,
+	mult__(MR,MPRIME,ZR,U,C,R1),
+	mult_([],_,[M|MR],MTR,MPRIME,R1,R).
+mult_([],_,_,[],_,Z,R) :- R=Z.
+mult__([M|MR],MPRIME,Z,U,C,R) :-
+	mult_get(Z,Z0,ZR),
+	C_ := C + U * M + Z0,
+	CL := C_ /\ RADIX_MASK,
+	CH := C_ >> RADIX_BITS,
+	R = [CL|R1],
+	mult__(MR,MPRIME,ZR,U,CH,R1).
+mult__([],_,Z,_,C,R) :-
+	mult_get(Z,Z0,ZR),
+	C_ := C + Z0,
+	CL := C_ /\ RADIX_MASK,
+	CH := C_ >> RADIX_BITS,
+	bigint:join_wo_h0(CH,[],R1),
+	bigint:join_wo_h0(CL,R1,R).
+mult__(X,[Y|YR],[M|MR],MPRIME,Z,U,C,C1,C2,R) :-
+	mult_get(Z,Z0,ZR),
+	mult_helper(U,C,C1,C2,X,Y,Z0,M,CH,CL,C1_,C2_),
+	R=[CL|R1],
+	mult__(X,YR,MR,MPRIME,ZR,U,CH,C1_,C2_,R1).
+mult__(X,[],[M|MR],MPRIME,Z,U,C,C1,C2,R) :-
+	mult_get(Z,Z0,ZR),
+	mult_helper(U,C,C1,C2,X,0,Z0,M,CH,CL,C1_,C2_),
+	R=[CL|R1],
+	mult__(X,[],MR,MPRIME,ZR,U,CH,0,C2_,R1).
+mult__(_,[],[],_,Z,U,C,C1,C2,R) :-
+	mult_get(Z,Z0,ZR),
+	C_ := C + C1 + C2 + Z0,
+	C_L := C_ /\ RADIX_MASK,
+	C_H := C_ >> RADIX_BITS,
+	bigint:join_wo_h0(C_H,[],R1),
+	bigint:join_wo_h0(C_L,R1,R).
+
+mult_get([X|XR],CAR,CDR) :- CAR=X, CDR=XR.
+mult_get([],CAR,CDR) :- CAR=0, CDR=[].
+mult_helper(U,PC,PC1,PC2,X,Y,Z,M,CH,CL,C1,C2) :-
+	C1_ := PC1 + X * Y,
+	C2_ := PC2 + U * M,
+	C1L := C1_ /\ RADIX_MASK,
+	C2L := C2_ /\ RADIX_MASK,
+	C1  := C1_ >> RADIX_BITS,
+	C2  := C2_ >> RADIX_BITS,
+	C   := PC + C1L + C2L + Z,
+	CL  := C   /\ RADIX_MASK,
+	CH  := C   >> RADIX_BITS.
+
+%
+% 冪乗
+% pow +X +Y +M +MPRIME -R
+% :: R = (X ^ Y) mod M
+%    (X,Rはモンゴメリ表現)
+%
+pow(X,Y,M,MPRIME,R) :- 
+	to_mont([1],M,MONT1),
+	pow(X,Y,M,MPRIME,MONT1,R).
+pow(_,[Y|YR],_,_,T,R) :- atom(YR),Y=:=0 | R=T.
+otherwise.
+pow(X,[Y|YR],M,MPRIME,T,R) :-
+	mult(X,X,M,MPRIME,X1),
+	BIT:=Y /\ 1,
+	(BIT =:= 1 -> mult(X,T,M,MPRIME,T1);
+	 BIT =:= 0 -> T1=T),
+	bigint:rshift([Y|YR],1,Y1),
+	pow(X1,Y1,M,MPRIME,T1,R).
+
+
+%
+% Montgomery表現に変換します
+%   X=数値, M=法, R=Montgomery表現
+%
+to_mont(X,M,R) :-
+#if DEBUG
+	io:outstream([print('ToMont: '),print(STRX),print('->'),print(STRR),print(', shift='),print(SHIFT),nl,print('  before mod='),print(STRX1),nl]),
+	bigint:str(X,STRX), bigint:str(R,STRR), bigint:str(X2,STRX1),
+#endif
+	bigint:get_length(M,LEN),
+	SHIFT := LEN * RADIX_BITS,
+	bigint:lshift(X,SHIFT,X2),
+	bigint:divmod(X2,M,Q,R).
+
+%
+% 最下位の数値の逆数を求めます
+%
+inverse([X|XR],R) :- 
+#if DEBUG
+	io:outstream([print('Compute mPrime from '),print(X),nl]),
+	io:outstream([print('  mPrime='),print(R),nl]),
+#endif
+	inverse(X,X,R).
+inverse(X,Y,R) :- 
+	Z := (X * Y) /\ RADIX_MASK,
+	(Z=:=1 -> R := (-Y) /\ RADIX_MASK;
+	 Z=\=1 -> TMP := (2 - Z) /\ RADIX_MASK,
+	          Y1 := (Y * TMP) /\ RADIX_MASK,
+	          inverse(X,Y1,R)).

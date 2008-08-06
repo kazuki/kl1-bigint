@@ -1,0 +1,61 @@
+KL1による素数列挙プログラム
+:: Copyright(C) 2008 Kazuki Oikawa
+
+1. はじめに
+  このプログラムは、KL1によって記述された素数列挙プログラムです。
+  内部の演算には多倍長演算を利用しているので、列挙する素数の桁に
+  制限はありません。指定された二値の間に含まれる素数を列挙します。
+
+2. 使い方
+  prime_finder.pkl1 を開き、mainの中にあるfind_primesの呼び出しの
+  引数の値を、列挙する素数の範囲に書き換えてmake後、実行するだけです。
+  なお、数値は8192を基数としてリストで与えます。
+
+  例1: 123456をリストで表現する
+
+    123456 = 15*8192 + 576 なので、[576, 15]
+
+  例2: 3～8192の間に含まれる素数を列挙する
+
+    1. prime_finder.pkl1を編集
+      --- prime_finder.pkl1.orig
+      +++ prime_finder.pkl1
+      @@ -3,7 +3,7 @@
+       % メイン
+       main :- inline:"srand(time((void*)0));" |
+              klicio:klicio([stdout(normal(OUT))]),
+      -       find_primes([3], [5081,36], OUT).
+      +       find_primes([3], [0,1], OUT).
+      
+       %
+       % S～Mまでの素数をリストアップ
+
+    2. $ make
+    3. $ ./prime-finder
+
+  また、単体テストとモンテカルロテストも含んでいるので、
+  改良の際にはテストにお役立てください。
+
+  * 単体テストの実行法
+    $ make
+    $ ./utests
+
+  * モンテカルロテストの実行法
+    $ make mctests
+    $ ./mctest-add
+    $ ./mctest-sub
+    $ ./mctest-mult
+    $ ./mctest-div
+
+3. ライセンス
+
+  修正BSDライセンス, X11ライセンスに従います。
+  詳しくはLICENSE.BSD, LICENSE.MIT-X11をご覧ください。
+
+4. 主な内容
+
+  * bigint.pkl1: 多倍長演算モジュール. 四則演算, 文字列への変換を提供
+  * modulus.pkl1: 剰余演算モジュール. 加算・乗算・冪乗を提供
+  * montgomery.pkl1: モンゴメリ演算モジュール. 乗算と還元を提供
+  * number_theory.pkl1: 数論関係の演算モジュール. 今のところGCDのみを提供
+  * primality_tests.pkl1: Miller-Rabin法に基づく素数判定モジュール

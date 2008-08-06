@@ -1,0 +1,142 @@
+:- module primality.
+% #define DEBUG 1
+
+%
+% 素数判定テスト
+%   N=テストする数, R=1なら素数, 0なら合成数
+%
+test(N,R) :-
+	test_small_primes(N,R1),
+	(R1 =:= 0 -> R=0;
+	 R1 =:= 1 -> R=1;
+	 R1 =:= 2 -> test_(N,R)).
+test_(N,R) :-
+	% Jaeschkeによる決定的素数判定のための係数選択
+	% Gerhard Jaeschke, On strong pseudoprimes to several bases,
+	% Mathematics of Computation 61 (1993), no. 204, pp. 915--926.
+	bigint:cmp(N, [5317, 7507, 70], C1),
+	bigint:cmp(N, [2241, 5526, 2260, 621], C2),
+	(C1 =< 0 -> trial_mr(N,[2,7,61],R);
+	 C1 > 0, C2 =< 0 -> trial_mr(N,[2,3,5,7,11,13,17],R);
+	 % Jaeschkeの方法が適用できない大きな数値のテスト
+	 otherwise;
+	 true -> bigint:sub(N,[1],N1), rand_list(5,N1,LIST), trial_mr(N,LIST,R)).
+
+%
+% 指定された数の乱数を生成
+%   rand_list +N +MAX -R
+%   N個の0～MAXまでの乱数をリストRに代入
+%
+rand_list(N,MAX,R) :- N > 0 | bigint:rand(MAX,X),
+	R=[X|R1], N1:=N-1, rand_list(N1,MAX,R1).
+rand_list(N,_,R) :- N =:= 0 | R=[].
+
+%
+% Miller-Rabin素数判定法に基づく素数判定実装
+%   Nが確率的素数ならR=1, Nが合成数ならR=0.
+%
+miller_rabin(N,K,R) :- 
+	bigint:sub(N,[1],N1),			% N-1を求める
+	bigint:cmp(K,N1,C),
+	(C < 0 -> mr_find_odd(N1,0,S,D),	% (N-1)=2^S*D
+#if DEBUG
+	 io:outstream([print('N-1=2^'),print(S),print('*'),print(D),nl]),
+#endif
+	 miller_rabin(N,N1,S,D,K,R);
+	 C >= 0 -> R=1).
+
+%
+% Miller-Rabin素数判定
+%   N: 判定する数
+%   N1: N-1
+%   S,D: N1=2^S*DとなるようなS,D
+%   A: テストに利用するパラメータ (2 <= K <= N-2)
+%   R: Nが確率的素数なら1, 合成数なら0
+%
+miller_rabin(N,N1,S,D,[A|AR],R) :- 
+	montgomery:to_mont([1],N,M1),
+	montgomery:to_mont(N1,N,MN1),
+	montgomery:inverse(N,NPRIME),
+	miller_rabin(N,NPRIME,M1,MN1,S,D,[A|AR],R).
+miller_rabin(N,NPRIME,M1,MN1,S,D,A,R) :- 
+	montgomery:to_mont(A,N,MA),
+	montgomery:pow(A,D,N,NPRIME,MY),	% Y=A^D (montgomery)
+	bigint:eq(MY,M1,C1),			% Y==1をチェック
+	bigint:eq(MY,MN1,C2),			% Y==N-1をチェック
+	S1:=S-1,
+	(S1>= 0,C1=:=0 -> R=1;				% Y==1なら擬似的に確率的素数と返す
+	 S1>= 0,C2=:=0 -> R=1;				% Y!=N-1なら確率的素数
+	 S1=:=0,C2=\=0 -> R=0;
+	 otherwise;
+	 true -> miller_rabin1(N,NPRIME,M1,MN1,S1,MY,R)). % A^D～A^(2^S*D)までチェック
+
+% Y=A^(2^n*D)
+miller_rabin1(N,NPRIME,M1,MN1,S,MY,R) :- S =\= 0 |
+	montgomery:mult(MY,MY,N,NPRIME,MY1),	% Y1=Y^2 (montgomery)
+	bigint:eq(MY1,M1,C1),			% Y1==1をチェック
+	bigint:eq(MY1,MN1,C2),			% Y1==N-1をチェック
+	S1 := S - 1,
+	(C2=:=0 -> R=1;
+	 S1=:=0,C2=\=0 -> R=0;
+	 S1=\=0,C1=:=0 -> R=0;
+	 otherwise;
+	 true -> miller_rabin1(N,NPRIME,M1,MN1,S1,MY1,R)).
+
+% N=2^s*D となるようなSとDを求める
+mr_find_odd([N|NR],C,S,D) :- N /\ 1 =:= 1 | S=C, D=[N|NR].
+mr_find_odd([N|NR],C,S,D) :- N /\ 1 =:= 0 | C1 := C + 1,
+	bigint:rshift([N|NR],1,N2),
+	mr_find_odd(N2,C1,S,D).
+
+%
+% 指定された基底でMiller-Rabinを実行
+%
+trial_mr(N,LIST,R) :- 
+	bigint:sub(N,[1],N1),
+	montgomery:to_mont([1],N,M1),
+	montgomery:to_mont(N1,N,MN1),
+	montgomery:inverse(N,NPRIME),
+	mr_find_odd(N1,0,S,D),
+	trial_mr(N,NPRIME,M1,MN1,S,D,LIST,R).
+trial_mr(N,NPRIME,M1,MN1,S,D,[A0|AR],R) :-
+	(integer(A0) -> A=[A0];
+	 list(A0) -> A=A0),
+	miller_rabin(N,NPRIME,M1,MN1,S,D,A,R1),
+	(R1 =:= 0 -> R=0;
+	 R1 =\= 0 -> trial_mr(N,NPRIME,M1,MN1,S,D,AR,R)).
+trial_mr(_,_,_,_,_,_,[],R) :- R=1.
+
+%
+% 小さな値で素数判定
+%   R=0なら合成数、1なら素数, 2ならたぶん素数
+%
+test_small_primes(X,R) :- 
+	TABLE=[2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47,
+	       53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107,
+	       109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167,
+	       173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229,
+	       233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283,
+	       293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359,
+	       367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431,
+	       433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491,
+	       499, 503, 509, 521, 523, 541, 547, 557, 563, 569, 571,
+	       577, 587, 593, 599, 601, 607, 613, 617, 619, 631, 641,
+	       643, 647, 653, 659, 661, 673, 677, 683, 691, 701, 709,
+	       719, 727, 733, 739, 743, 751, 757, 761, 769, 773, 787,
+	       797, 809, 811, 821, 823, 827, 829, 839, 853, 857, 859,
+	       863, 877, 881, 883, 887, 907, 911, 919, 929, 937, 941,
+	       947, 953, 967, 971, 977, 983, 991, 997],
+	test_small_primes(X,TABLE,R).
+test_small_primes([X|XR],TABLE,R) :- atom(XR),X=<997 |
+	test_small_primes_eq(X,TABLE,R).
+otherwise.
+test_small_primes(X,TABLE,R) :-
+	test_small_primes_divmod(X,TABLE,R).
+test_small_primes_eq(X,[T|TR],R) :- X=:=T | R=1.
+test_small_primes_eq(X,[T|TR],R) :- X < T | R=0.
+test_small_primes_eq(X,[T|TR],R) :- X > T | test_small_primes_eq(X,TR,R).
+test_small_primes_divmod(X,[T|TR],R) :-
+	bigint:divmod1(X,T,REM,MOD),
+	(MOD =:= 0 -> R=0;
+	 MOD =\= 0 -> test_small_primes_divmod(X,TR,R)).
+test_small_primes_divmod(X,[],R) :- R=2.
